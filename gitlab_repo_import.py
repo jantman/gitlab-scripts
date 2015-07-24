@@ -6,7 +6,7 @@ gitlab_repo_import.py
 Helper to import an existing bare git repo into GitLab.
 
 If you have ideas for improvements, or want the latest version, it's at:
-<https://github.com/jantman/misc-scripts/blob/master/gitlab_repo_import.py>
+<https://github.com/jantman/gitlab-scripts/blob/master/gitlab_repo_import.py>
 
 Usage
 -----
@@ -28,10 +28,27 @@ Copyright and License
 ----------------------
 
 Copyright 2015 Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
-Free for any use provided that patches are submitted back to me.
+
+    This file is part of gitlab-scripts.
+
+    gitlab-scripts is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    gitlab-scripts is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with gitlab-scripts.  If not, see <http://www.gnu.org/licenses/>.
 
 Changelog
 ----------
+
+2015-07-24 Jason Antman <jason@jasonantman.com>:
+  - move to https://github.com/jantman/gitlab-scripts/blob/master/gitlab_repo_import.py
 
 2015-07-21 Jason Antman <jason@jasonantman.com>:
   - add remove_on_fail option to remove destination directory if copy fails
