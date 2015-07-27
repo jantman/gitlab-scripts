@@ -45,6 +45,9 @@ Copyright 2015 Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 Changelog
 ----------
 
+2015-07-27 Jason Antman <jason@jasonantman.com>:
+  - switch from creating UserKey() to CurrentUserKey() to allow use by non-admins
+
 2015-07-24 Jason Antman <jason@jasonantman.com>:
   - move to https://github.com/jantman/gitlab-scripts/blob/master/gitlab_ssh_key_sync.py
 
@@ -105,10 +108,9 @@ class GitLabSSHKeySync:
             logger.debug("Adding key from line %d: %s",
                          key['line_num'],
                          key['raw'])
-            k = gitlab.UserKey(
+            k = gitlab.CurrentUserKey(
                 self.conn,
                 data={
-                    'user_id': user_id,
                     'title': key['comment'],
                     'key': key['raw'],
                 }
