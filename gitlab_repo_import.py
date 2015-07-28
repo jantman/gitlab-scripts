@@ -22,6 +22,10 @@ Requirements
 
 python-gitlab (tested with 0.9.2; `pip install python-gitlab`)
 
+WARNING - Note that per https://github.com/gpocentek/python-gitlab/issues/63
+python-gitlab 0.9.2 doesn't handle paginated responses, so it will silently
+disregard anything past the 20th result.
+
 Written for python2.7
 
 Copyright and License
