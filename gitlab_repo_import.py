@@ -12,7 +12,7 @@ Usage
 -----
 
 1. Export your GitLab Private API token as GITLAB_TOKEN, or you will be prompted
-   for it interactively.
+   for it interactively. This MUST be for a user with Admin rights.
 2. Run the script:
 
     gitlab_repo_import.py [options] repo_path [repo_path ...]
@@ -47,6 +47,10 @@ Copyright 2015 Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 Changelog
 ----------
 
+2015-07-28 Jason Antman <jason@jasonantman.com>:
+  - replace hard-coded default user/group of 'git'/'git' with pull from config
+  - fix _get_gitlab_project() to use self.conn.all_projects() (needs Admin)
+
 2015-07-24 Jason Antman <jason@jasonantman.com>:
   - move to https://github.com/jantman/gitlab-scripts/blob/master/gitlab_repo_import.py
 
@@ -68,6 +72,7 @@ import subprocess
 import json
 import shutil
 import pwd
+import grp
 
 import gitlab
 
@@ -108,8 +113,6 @@ def ignore_broken_links_callback(dirname, items):
 class GitLabRepoImport:
     """Helper to import an existing bare git repo into GitLab."""
 
-    git_user = 'git'
-
     def __init__(self, url, apikey, gitlab_ctl_path, repos_dir=None,
                  remove_on_fail=False, ignore_broken_links=False):
         """connect to GitLab"""
@@ -120,10 +123,25 @@ class GitLabRepoImport:
         self.conn.auth()
         logger.info("Connected to GitLab as %s",
                     self.conn.user.username)
+        git_user, git_group, self.repos_dir = self._get_config(gitlab_ctl_path)
+
+        try:
+            self.git_uid = pwd.getpwnam(git_user).pw_uid
+        except:
+            raise SystemExit("Could not find uid for user '%s'; this script "
+                             "currently only supports a local gitlab user.")
+        try:
+            self.git_gid = grp.getgrnam(git_group).gr_gid
+        except:
+            raise SystemExit("Could not find gid for group '%s'; this script "
+                             "currently only supports a local gitlab group.")
+
+        logger.info("Git repo ownership: %s:%s (%d:%d)", git_user, git_group,
+                    self.git_uid, self.git_gid)
+
+        # override
         if repos_dir is not None:
             self.repos_dir = repos_dir
-        else:
-            self.repos_dir = self._get_repo_dir(gitlab_ctl_path)
 
     def run(self, group_name, repo_paths, project_settings, migrate_hooks):
         """
@@ -175,18 +193,15 @@ class GitLabRepoImport:
                 ignore_cb = ignore_broken_links_callback
             shutil.copytree(repo_path, dest_path, ignore=ignore_cb)
             logger.debug("Done copying")
-            tmp = pwd.getpwnam(self.git_user)
-            git_uid = tmp.pw_uid
-            git_gid = tmp.pw_gid
             logger.info("Recursively setting ownership on %s to %d:%d",
-                        dest_path, git_uid, git_gid)
+                        dest_path, self.git_uid, self.git_gid)
             # from http://stackoverflow.com/a/2853934/211734
-            os.chown(dest_path, git_uid, git_gid)
+            os.chown(dest_path, self.git_uid, self.git_gid)
             for root, dirs, files in os.walk(dest_path):
                 for momo in dirs:
-                    os.chown(os.path.join(root, momo), git_uid, git_gid)
+                    os.chown(os.path.join(root, momo), self.git_uid, self.git_gid)
                 for momo in files:
-                    os.chown(os.path.join(root, momo), git_uid, git_gid)
+                    os.chown(os.path.join(root, momo), self.git_uid, self.git_gid)
             logger.debug("Done chown'ing")
             if migrate_hooks:
                 hook_dir = os.path.join(dest_path, 'hooks')
@@ -223,7 +238,7 @@ class GitLabRepoImport:
 
     def get_gitlab_project(self, namespace, project_name):
         """get the Project object for the specified project, or None if not found"""
-        for p in self.conn.Project():
+        for p in self.conn.all_projects():
             if p.name == project_name and p.namespace.name == namespace:
                 return p
         return None
@@ -292,8 +307,15 @@ class GitLabRepoImport:
             return
         logger.info("Settings updated for project %s", project.path_with_namespace)
 
-    def _get_repo_dir(self, gitlab_ctl_path):
-        """use gitlab-ctl to get the absolute path to git gitlab_shell repo dir"""
+    def _get_config(self, gitlab_ctl_path):
+        """
+        use gitlab-ctl to get the absolute path to git gitlab_shell repo dir
+        and the gitlab user and group
+        """
+        # defaults
+        user = 'git'
+        group = 'git'
+        # command to run
         cmd = [gitlab_ctl_path, 'show-config']
         logger.info("Running %s to get gitlab configuration", ' '.join(cmd))
         res = subprocess.check_output(cmd)
@@ -303,6 +325,7 @@ class GitLabRepoImport:
         except:
             logger.error("Unable to read JSON output from %s", ' '.join(cmd))
             raise SystemExit(1)
+        # try to find path
         try:
             path = conf['gitlab']['gitlab-rails']['gitlab_shell_repos_path']
             logger.info("Found repos path from config as: %s", path)
@@ -310,7 +333,21 @@ class GitLabRepoImport:
             path = '/var/opt/gitlab/git-data/repositories'
             logger.warning("Could not find gitlab_shell_repos_path in config, "
                            "using default of: %s", path)
-        return path
+        # try to find user
+        try:
+            user = conf['gitlab']['user']['username']
+            logger.info("Found gitlab username from config as: %s", user)
+        except KeyError:
+            logger.warning("Could not find gitlab username in config, using "
+                           "default of: %s", user)
+        # try to find group
+        try:
+            group = conf['gitlab']['user']['group']
+            logger.info("Found gitlab group from config as: %s", group)
+        except KeyError:
+            logger.warning("Could not find gitlab group in config, using "
+                           "default of: %s", group)
+        return (user, group, path)
 
 
 def parse_args(argv):
