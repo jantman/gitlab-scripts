@@ -51,6 +51,9 @@ Copyright 2015 Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 Changelog
 ----------
 
+2015-07-29 Jason Antman <jason@jasonantman.com>:
+  - add option to remote refs/remotes when copying; refactor copy file ignoring
+
 2015-07-28 Jason Antman <jason@jasonantman.com>:
   - replace hard-coded default user/group of 'git'/'git' with pull from config
   - fix _get_gitlab_project() to use self.conn.all_projects() (needs Admin)
@@ -104,24 +107,17 @@ VISIBILITY_LEVELS = {
     'public': 20,
 }
 
-def ignore_broken_links_callback(dirname, items):
-    skip = []
-    for item in items:
-        path = os.path.join(dirname, item)
-        if not os.path.exists(path):
-            logger.warning("Skipping broken link: %s", path)
-            skip.append(item)
-    return skip
-
 
 class GitLabRepoImport:
     """Helper to import an existing bare git repo into GitLab."""
 
     def __init__(self, url, apikey, gitlab_ctl_path, repos_dir=None,
-                 remove_on_fail=False, ignore_broken_links=False):
+                 remove_on_fail=False, ignore_broken_links=False,
+                 ignore_refs_remotes=False):
         """connect to GitLab"""
         self.remove_on_fail = remove_on_fail
         self.ignore_broken_links = ignore_broken_links
+        self.ignore_refs_remotes = ignore_refs_remotes
         logger.debug("Connecting to GitLab")
         self.conn = gitlab.Gitlab(url, apikey)
         self.conn.auth()
@@ -177,6 +173,19 @@ class GitLabRepoImport:
         if failed > 0:
             raise SystemExit(1)
 
+    def ignore_files_callback(self, dirname, items):
+        skip = []
+        for item in items:
+            path = os.path.join(dirname, item)
+            if self.ignore_broken_links and not os.path.exists(path):
+                logger.warning("Skipping broken link: %s", path)
+                skip.append(item)
+            elif (self.ignore_refs_remotes and
+                  path.startswith(self.refs_remotes_path)):
+                logger.warning("Skipping refs/remotes path: %s", path)
+                skip.append(item)
+        return skip
+
     def do_repo(self, create_path, repo_path, group_name, project_settings,
                 migrate_hooks):
         """import one repo"""
@@ -192,10 +201,9 @@ class GitLabRepoImport:
             return False
         logger.info("Copying %s to %s", repo_path, dest_path)
         try:
-            ignore_cb = None
-            if self.ignore_broken_links:
-                ignore_cb = ignore_broken_links_callback
-            shutil.copytree(repo_path, dest_path, ignore=ignore_cb)
+            # needed in callback
+            self.refs_remotes_path = os.path.join(repo_path, 'refs', 'remotes')
+            shutil.copytree(repo_path, dest_path, ignore=self.ignore_files_callback)
             logger.debug("Done copying")
             logger.info("Recursively setting ownership on %s to %d:%d",
                         dest_path, self.git_uid, self.git_gid)
@@ -388,6 +396,10 @@ def parse_args(argv):
                    dest='ignore_broken_links',
                    help='ignore any broken links in source repo when copying to'
                    ' GitLab destination')
+    p.add_argument('--ignore-refs-remotes', action='store_true', default=False,
+                   dest='ignore_refs_remotes',
+                   help='ignore refs/remotes/* content in source repo (i.e. '
+                   'from gitolite)')
 
     # project settings
     p.add_argument('--visibility', action='store', dest='visibility',
@@ -443,5 +455,6 @@ if __name__ == "__main__":
         repos_dir=args.repos_dir,
         remove_on_fail=args.remove_on_fail,
         ignore_broken_links=args.ignore_broken_links,
+        ignore_refs_remotes=args.ignore_refs_remotes,
     )
     syncer.run(args.group, args.repo_path, args.settings, args.migrate_hooks)
