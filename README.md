@@ -1,6 +1,8 @@
 gitlab-scripts
 ==============
 
+[![Project Status: Unsupported – The project has reached a stable, usable state but the author(s) have ceased all work on it. A new maintainer may be desired.](http://www.repostatus.org/badges/latest/unsupported.svg)](http://www.repostatus.org/#unsupported)
+
 Some Python scripts to help administering and migrating to GitLab.
 
 Note that per [Issue #63](https://github.com/gpocentek/python-gitlab/issues/63) there's a bug
